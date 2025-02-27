@@ -58,15 +58,10 @@ Execute the script with:
 python app.py
 ```
 
-## Installation & Usage
+## Usage
 
-1. Clone or download this repository.
-2. Run the script:
-```sh
- python app.py
- ```
-3. Use the GUI to select a folder containing resumes.
-4. Click "Save to Excel" to export the results.
+1. Use the GUI to browse and select a folder containing resumes.
+2. Click "Save to Excel" to export the results.
 
 ## Notes
 - This project uses **Python 3.10**.
