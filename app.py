@@ -2,6 +2,7 @@ import os
 import sys
 import re
 import spacy
+import logging
 import pdfplumber
 import pandas as pd
 import tkinter as tk
@@ -10,6 +11,8 @@ from docx import Document
 from collections import Counter
 from difflib import SequenceMatcher
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # Load Spacy NLP model
 if getattr(sys, 'frozen', False):  # Check if running from a packaged executable
     model_path = os.path.join(sys._MEIPASS, 'en_core_web_lg')
@@ -17,142 +20,161 @@ else:
     model_path = 'en_core_web_lg'
 
 nlp = spacy.load(model_path)
-
+logging.info("Spacy model loaded successfully.")
 
 # Function to extract text from PDF
 def extract_from_pdf(pdf_path):
-    with pdfplumber.open(pdf_path) as pdf:
-        text = ''
-        first_two_words = ''
+    logging.info(f"Extracting text from PDF: {pdf_path}")
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            text = ''
+            first_two_words = ''
 
-        for i, page in enumerate(pdf.pages):
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-                if i == 0 or first_two_words == "":
-                    first_page_text = page_text.strip()
-                    words = first_page_text.split()
-                    first_two_words = ' '.join(words[:2]) if len(
-                        words) >= 2 else first_page_text  # Handle cases with <2 words
-            else:
-                first_two_words = ""
+            for i, page in enumerate(pdf.pages):
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+                    if i == 0 or first_two_words == "":
+                        first_page_text = page_text.strip()
+                        words = first_page_text.split()
+                        first_two_words = ' '.join(words[:2]) if len(
+                            words) >= 2 else first_page_text  # Handle cases with <2 words
+                else:
+                    first_two_words = ""
+    except Exception as e:
+        logging.error(f"Error extracting from PDF: {e}")
 
     return extract_name_and_email_from_text(text, first_two_words)
 
 
 # Function to extract text from DOCX
 def extract_from_docx(docx_path):
+    logging.info(f"Extracting text from DOCX: {docx_path}")
     doc = Document(docx_path)
     text = ''
     first_two_words = ''
 
-    # Extract text from all paragraphs
-    for i, para in enumerate(doc.paragraphs):
-        para_text = para.text
-        text += para_text + '\n'
+    try:
+        # Extract text from all paragraphs
+        for i, para in enumerate(doc.paragraphs):
+            para_text = para.text
+            text += para_text + '\n'
 
-        if i == 0:  # Capture the first paragraph's text
-            words = para_text.split()
-            first_two_words = ' '.join(words[:2])
+            if i == 0:  # Capture the first paragraph's text
+                words = para_text.split()
+                first_two_words = ' '.join(words[:2])
 
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                text += cell.text + '\n'
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    text += cell.text + '\n'
 
-    for section in doc.sections:
-        for header in section.header.paragraphs:
-            text += header.text + '\n'
+        for section in doc.sections:
+            for header in section.header.paragraphs:
+                text += header.text + '\n'
+    except Exception as e:
+        logging.error(f"Error extracting from DOCX: {e}")
 
     return extract_name_and_email_from_text(text, first_two_words)
 
 # Function to find name similar to email
 def find_name_similar_to_email(sentences, email):
-    best_match = ""
-    best_ratio = 0.0
-    target = email.split("@")[0].lower()
-    email = email.lower()
-    word_list = []
+    logging.info("Finding name similar to email...")
 
-    for sentence in sentences:
-        word_list.extend(sentence.lower().split())
-    # print('words_list',word_list)
+    try:
+        best_match = ""
+        best_ratio = 0.0
+        target = email.split("@")[0].lower()
+        email = email.lower()
+        word_list = []
 
-    for word in word_list:
-        if word == email.lower():
-            continue
-        ratio = SequenceMatcher(None, target, word).ratio()
-        if ratio > best_ratio:  # Keep the best matching word
-            best_match = word
-            best_ratio = ratio
+        for sentence in sentences:
+            word_list.extend(sentence.lower().split())
+        # print('words_list',word_list)
 
-    for i in range(len(word_list) - 1):
-        if '@' in word_list[i] or '@' in word_list[i + 1]:
-            continue
-        combined_name = f"{word_list[i]}{word_list[i + 1]}"  # Form adjacent two-word name
-        combined_name_orig = f"{word_list[i]} {word_list[i + 1]}"
-        # print('combined_name1',combined_name)
-        ratio = SequenceMatcher(None, target, combined_name).ratio()
-        if ratio > best_ratio:
-            best_match = combined_name_orig
-            best_ratio = ratio
-        else:
-            combined_name = f"{word_list[i + 1]}{word_list[i]}"  # Form adjacent reverse two-word name
-            # print('combined_name2',combined_name)
+        for word in word_list:
+            if word == email.lower():
+                continue
+            ratio = SequenceMatcher(None, target, word).ratio()
+            if ratio > best_ratio:  # Keep the best matching word
+                best_match = word
+                best_ratio = ratio
+
+        for i in range(len(word_list) - 1):
+            if '@' in word_list[i] or '@' in word_list[i + 1]:
+                continue
+            combined_name = f"{word_list[i]}{word_list[i + 1]}"  # Form adjacent two-word name
+            combined_name_orig = f"{word_list[i]} {word_list[i + 1]}"
+            # print('combined_name1',combined_name)
             ratio = SequenceMatcher(None, target, combined_name).ratio()
             if ratio > best_ratio:
                 best_match = combined_name_orig
                 best_ratio = ratio
+            else:
+                combined_name = f"{word_list[i + 1]}{word_list[i]}"  # Form adjacent reverse two-word name
+                # print('combined_name2',combined_name)
+                ratio = SequenceMatcher(None, target, combined_name).ratio()
+                if ratio > best_ratio:
+                    best_match = combined_name_orig
+                    best_ratio = ratio
+    except Exception as e:
+        logging.error(f"Error finding name similar to email: {e}")
 
     return best_match.title()
 
 
 # Function to extract name and email from text
 def extract_name_and_email_from_text(text, first_two_words):
-    spacy_names = []
-    emails = []
-    email_context = ""
-    email_line = ""
-    first_email = ""
-    name_similar_to_email = ""
+    logging.info("Extracting names and emails from text...")
+    try:
+        spacy_names = []
+        emails = []
+        email_context = ""
+        email_line = ""
+        first_email = ""
+        name_similar_to_email = ""
 
-    # Apply NLP model to the text
-    doc = nlp(text)
-    # unique_labels = set(entity.label_ for entity in doc.ents)
-    # print("Unique Entity Labels:", unique_labels)
+        # Apply NLP model to the text
+        doc = nlp(text)
+        # unique_labels = set(entity.label_ for entity in doc.ents)
+        # print("Unique Entity Labels:", unique_labels)
 
-    # Iterate through the detected entities to find names and emails
-    for entity in doc.ents:
-        if entity.label_ == 'PERSON':
-            spacy_names.append(entity.text)
+        # Iterate through the detected entities to find names and emails
+        for entity in doc.ents:
+            if entity.label_ == 'PERSON':
+                spacy_names.append(entity.text)
 
-    # use regex to find email
-    if not emails:
-        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-        email_match = re.search(email_pattern, text)
-        if email_match:
-            emails.append(email_match.group(0))
+        # use regex to find email
+        if not emails:
+            email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+            email_match = re.search(email_pattern, text)
+            if email_match:
+                emails.append(email_match.group(0))
 
-    # Extract first email's surrounding text (3 lines above and below)
-    if emails:
-        first_email = emails[0]
+        # Extract first email's surrounding text (3 lines above and below)
+        if emails:
+            first_email = emails[0]
 
-        lines = text.split("\n")
-        email_line_index = next((i for i, line in enumerate(lines) if first_email in line), None)
+            lines = text.split("\n")
+            email_line_index = next((i for i, line in enumerate(lines) if first_email in line), None)
 
-        if email_line_index is not None:
-            start = max(0, email_line_index - 3)  # 3 lines before
-            end = min(len(lines), email_line_index + 4)  # 3 lines after
-            email_context = "\n".join(lines[start:end])
-            email_line = lines[email_line_index]
-            context = [first_two_words, email_context, email_line]
-            name_similar_to_email = find_name_similar_to_email(context, first_email)
+            if email_line_index is not None:
+                start = max(0, email_line_index - 3)  # 3 lines before
+                end = min(len(lines), email_line_index + 4)  # 3 lines after
+                email_context = "\n".join(lines[start:end])
+                email_line = lines[email_line_index]
+                context = [first_two_words, email_context, email_line]
+                name_similar_to_email = find_name_similar_to_email(context, first_email)
+
+    except Exception as e:
+        logging.error(f"Error extracting names and emails: {e}")
 
     return first_two_words, spacy_names, first_email, name_similar_to_email
 
 
 # Function to process all files in folder
 def extract_from_all_files(folder_path):
+    logging.info(f"Processing all files in folder: {folder_path}")
     results = []
     for filename in os.listdir(folder_path):
         file_path = os.path.join(folder_path, filename)
@@ -169,18 +191,19 @@ def extract_from_all_files(folder_path):
 
 #Function to get final results
 def get_final_results(folder_path):
+    logging.info("Generating final results...")
     results = []
     extracted_data = extract_from_all_files(folder_path)
     for filename, first_two_words, spacy_names, email, name_similar_to_email in extracted_data:
-        print(f"File: {filename}")
-        print(f"first_two_words: {first_two_words}")
-        print(f"Spacy Names: {spacy_names}")
-        print(f"Name_similar_to_email: {name_similar_to_email}")
+        logging.info(f"\n\nFile: {filename}")
+        logging.info(f"first_two_words: {first_two_words}")
+        logging.info(f"Spacy Names: {spacy_names}")
+        logging.info(f"Name_similar_to_email: {name_similar_to_email}")
         names = [first_two_words, name_similar_to_email]
         names.extend(spacy_names)
         names = [n.strip().lower().title() for n in names if n.strip()]
-        print(f"All names: {names}")
-        print(f"unique names {list(set(names))}")
+        logging.info(f"All names: {names}")
+        logging.info(f"unique names {list(set(names))}")
 
         name_counts = Counter(names)
         selected_name = ""
@@ -194,8 +217,8 @@ def get_final_results(folder_path):
         elif spacy_names:
             selected_name = spacy_names[0]
 
-        print(f"\nSelected Name: {selected_name}")
-        print(f"SelectedEmail: {email}")
+        logging.info(f"Selected Name: {selected_name}")
+        logging.info(f"SelectedEmail: {email}")
         results.append((filename, selected_name, email))
 
     return results
