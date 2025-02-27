@@ -287,11 +287,11 @@ def extract_from_all_files(folder_path):
         for future in as_completed(future_to_file):
             file_path = future_to_file[future]
             filename = os.path.basename(file_path)
-            #try:
-            first_two_words, names, email, name_similar_to_email, name_email_ratio = future.result()
-            results.append((filename, first_two_words, list(set(names)), email, name_similar_to_email, name_email_ratio))
-            #except Exception as e:
-             #   logging.error(f"Error processing {filename}: {e}")
+            try:
+                first_two_words, names, email, name_similar_to_email, name_email_ratio = future.result()
+                results.append((filename, first_two_words, list(set(names)), email, name_similar_to_email, name_email_ratio))
+            except Exception as e:
+                logging.error(f"Error processing {filename}: {e}")
 
     return results
 
