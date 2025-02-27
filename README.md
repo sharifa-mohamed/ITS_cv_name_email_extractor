@@ -81,7 +81,8 @@ python app.py
 ## Usage
 
 1. Use the GUI to browse and select a folder containing resumes.
-2. Click "Save to Excel" to export the results.
+2. Click "Save to Excel" to export the results to EXCEL.
+3. Click "Save to JSON" to export the results to JSON.
 
 ## Notes
 - This project uses **Python 3.10**.
