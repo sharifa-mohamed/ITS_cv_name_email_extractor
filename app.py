@@ -68,14 +68,6 @@ def extract_from_pdf(pdf_path):
 
     return extract_name_and_email_from_text(text, first_two_words)
 
-# Extract first two words from the entire text
-def get_first_two_words(text):
-    words = text.strip().split()
-    first_two_words = ' '.join(words[:2]) if len(
-        words) >= 2 else text.strip()  # Handle cases with <2 words
-    return first_two_words
-
-
 # Function to extract text from DOCX
 def extract_from_docx(docx_path):
     logging.info(f"Extracting text from DOCX: {docx_path}")
@@ -126,6 +118,58 @@ def extract_from_doc(doc_path):
     return extract_name_and_email_from_text(text, get_first_two_words(text))
 
 
+def extract_name_and_email_from_text(text, first_two_words):
+    logging.info("Extracting names and emails from text...")
+
+    spacy_names = []
+    emails = []
+    email_context = ""
+    email_line = ""
+    first_email = ""
+    name_similar_to_email = ""
+    name_email_ratio = 0
+
+    try:
+
+        # Apply NLP model to the text
+        doc = nlp(text)
+        # unique_labels = set(entity.label_ for entity in doc.ents)
+        # print("Unique Entity Labels:", unique_labels)
+
+        # Iterate through the detected entities to find names and emails
+        for entity in doc.ents:
+            if entity.label_ == 'PERSON':
+                spacy_names.append(entity.text)
+
+        # use regex to find email
+
+        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{1,}'
+        email_match = re.search(email_pattern, text)
+        if email_match:
+            emails.append(email_match.group(0))
+
+        # Extract first email's surrounding text (3 lines above and below)
+        if emails:
+            first_email = emails[0]
+
+            lines = text.split("\n")
+            email_line_index = next((i for i, line in enumerate(lines) if first_email in line), None)
+
+            if email_line_index is not None:
+                start = max(0, email_line_index - 3)  # 3 lines before
+                end = min(len(lines), email_line_index + 4)  # 3 lines after
+                email_context = "\n".join(lines[start:end])
+                email_line = lines[email_line_index]
+                context = [first_two_words, email_context, email_line]
+                name_similar_to_email, name_email_ratio = find_name_similar_to_email(context, first_email)
+
+    except Exception as e:
+        logging.error(f"Error extracting names and emails: {e}")
+
+    return first_two_words, spacy_names, first_email, name_similar_to_email, name_email_ratio
+
+
+
 # Function to find name similar to email
 def find_name_similar_to_email(sentences, email):
     logging.info("Finding name similar to email...")
@@ -173,88 +217,6 @@ def find_name_similar_to_email(sentences, email):
     return best_match.title(), best_ratio
 
 
-# Function to extract name and email from text
-def extract_name_and_email_from_text(text, first_two_words):
-    logging.info("Extracting names and emails from text...")
-    try:
-        spacy_names = []
-        emails = []
-        email_context = ""
-        email_line = ""
-        first_email = ""
-        name_similar_to_email = ""
-        name_email_ratio =0
-
-        # Apply NLP model to the text
-        doc = nlp(text)
-        # unique_labels = set(entity.label_ for entity in doc.ents)
-        # print("Unique Entity Labels:", unique_labels)
-
-        # Iterate through the detected entities to find names and emails
-        for entity in doc.ents:
-            if entity.label_ == 'PERSON':
-                spacy_names.append(entity.text)
-
-        # use regex to find email
-        if not emails:
-            email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{1,}'
-            email_match = re.search(email_pattern, text)
-            if email_match:
-                emails.append(email_match.group(0))
-
-        # Extract first email's surrounding text (3 lines above and below)
-        if emails:
-            first_email = emails[0]
-
-            lines = text.split("\n")
-            email_line_index = next((i for i, line in enumerate(lines) if first_email in line), None)
-
-            if email_line_index is not None:
-                start = max(0, email_line_index - 3)  # 3 lines before
-                end = min(len(lines), email_line_index + 4)  # 3 lines after
-                email_context = "\n".join(lines[start:end])
-                email_line = lines[email_line_index]
-                context = [first_two_words, email_context, email_line]
-                name_similar_to_email, name_email_ratio = find_name_similar_to_email(context, first_email)
-
-    except Exception as e:
-        logging.error(f"Error extracting names and emails: {e}")
-
-    return first_two_words, spacy_names, first_email, name_similar_to_email, name_email_ratio
-
-
-# Function to process all files in folder
-def extract_from_all_files(folder_path):
-    logging.info(f"Processing all files in folder: {folder_path}")
-    results = []
-    file_paths = [
-        os.path.join(folder_path, f)
-        for f in os.listdir(folder_path)
-        if f.lower().endswith((".pdf", ".docx", ".doc"))
-    ]
-
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        future_to_file = {}
-        for path in file_paths:
-            if path.lower().endswith(".pdf"):
-                future_to_file[executor.submit(extract_from_pdf, path)] = path
-            elif path.lower().endswith(".docx"):
-                future_to_file[executor.submit(extract_from_docx, path)] = path
-            elif path.lower().endswith(".doc"):
-                future_to_file[executor.submit(extract_from_doc, path)] = path
-
-
-        for future in as_completed(future_to_file):
-            file_path = future_to_file[future]
-            filename = os.path.basename(file_path)
-            #try:
-            first_two_words, names, email, name_similar_to_email, name_email_ratio = future.result()
-            results.append((filename, first_two_words, list(set(names)), email, name_similar_to_email, name_email_ratio))
-            #except Exception as e:
-             #   logging.error(f"Error processing {filename}: {e}")
-
-    return results
-
 #Function to get final results
 def get_final_results(folder_path):
     logging.info("Generating final results...")
@@ -300,6 +262,46 @@ def get_final_results(folder_path):
         results.append((filename, selected_name, email))
 
     return results
+
+# Function to process all files in folder
+def extract_from_all_files(folder_path):
+    logging.info(f"Processing all files in folder: {folder_path}")
+    results = []
+    file_paths = [
+        os.path.join(folder_path, f)
+        for f in os.listdir(folder_path)
+        if f.lower().endswith((".pdf", ".docx", ".doc"))
+    ]
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        future_to_file = {}
+        for path in file_paths:
+            if path.lower().endswith(".pdf"):
+                future_to_file[executor.submit(extract_from_pdf, path)] = path
+            elif path.lower().endswith(".docx"):
+                future_to_file[executor.submit(extract_from_docx, path)] = path
+            elif path.lower().endswith(".doc"):
+                future_to_file[executor.submit(extract_from_doc, path)] = path
+
+
+        for future in as_completed(future_to_file):
+            file_path = future_to_file[future]
+            filename = os.path.basename(file_path)
+            #try:
+            first_two_words, names, email, name_similar_to_email, name_email_ratio = future.result()
+            results.append((filename, first_two_words, list(set(names)), email, name_similar_to_email, name_email_ratio))
+            #except Exception as e:
+             #   logging.error(f"Error processing {filename}: {e}")
+
+    return results
+
+
+# Extract first two words from the entire text
+def get_first_two_words(text):
+    words = text.strip().split()
+    first_two_words = ' '.join(words[:2]) if len(
+        words) >= 2 else text.strip()  # Handle cases with <2 words
+    return first_two_words
 
 
 # GUI Application
