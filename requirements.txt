@@ -1,0 +1,9 @@
+pandas==2.2.3
+numpy==2.2.3
+lxml==5.3.1
+spacy==3.8.4
+en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+pdfminer.six==20231228
+pdfplumber==0.11.5
+openpyxl==3.1.5
+python-docx==1.1.2
